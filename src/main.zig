@@ -393,24 +393,75 @@ const Tree = struct {
             } else {
                 const available_cols = crnt.data.check_cols();
 
-                // No memory reducing strategy other then non-repeat/reflection
-                for (0..7) |i| {
-                    if (available_cols[i]) {
-                        var new_board = crnt.data;
-                        const col: u3 = @intCast(i);
-                        try new_board.move(col, self.player);
-                        if (h.get(new_board)) |node| {
+                // Only includes wins in the event nodes child does have a win
+                if (self.player == 1) {
+                    for (0..7) |i| {
+                        if (available_cols[i]) {
+                            var new_board = crnt.data;
+                            const col: u3 = @intCast(i);
+                            try new_board.move(col, 1);
+                            if (h.get(new_board)) |node| {
+                                try node.parents.append(crnt);
+                                crnt.children[i] = node;
+                            } else if (h.get(new_board.reflect())) |node| {
+                                try node.parents.append(crnt);
+                                crnt.children[i] = node;
+                            } else {
+                                const child = try TNode.init(self.a, new_board);
+                                try child.parents.append(crnt);
+                                crnt.children[i] = child;
+                                try h.put(new_board, child);
+                                if (new_board.is_win() == 0) {
+                                    try q.in(child);
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    var valid_boards = std.ArrayList(Board).init(self.a);
+                    errdefer valid_boards.deinit();
+                    var is_winner = false;
+                    for (0..7) |i| {
+                        if (available_cols[i]) {
+                            var new_board = crnt.data;
+                            const col: u3 = @intCast(i);
+                            try new_board.move(col, -1);
+                            try valid_boards.append(new_board);
+                            if (new_board.is_win() != 0) {
+                                is_winner = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (is_winner) {
+                        const idx = valid_boards.items.len - 1;
+                        const winner: Board = valid_boards.pop();
+                        if (h.get(winner)) |node| {
                             try node.parents.append(crnt);
-                            crnt.children[i] = node;
-                        } else if (h.get(new_board.reflect())) |node| {
+                            crnt.children[idx] = node;
+                        } else if (h.get(winner.reflect())) |node| {
                             try node.parents.append(crnt);
-                            crnt.children[i] = node;
+                            crnt.children[idx] = node;
                         } else {
-                            const child = try TNode.init(self.a, new_board);
+                            const child = try TNode.init(self.a, winner);
                             try child.parents.append(crnt);
-                            crnt.children[i] = child;
-                            try h.put(new_board, child);
-                            if (new_board.is_win() == 0) {
+                            crnt.children[idx] = child;
+                            try h.put(winner, child);
+                        }
+                    } else {
+                        for (valid_boards.items, 0..) |board, i| {
+                            if (h.get(board)) |node| {
+                                try node.parents.append(crnt);
+                                crnt.children[i] = node;
+                            } else if (h.get(board.reflect())) |node| {
+                                try node.parents.append(crnt);
+                                crnt.children[i] = node;
+                            } else {
+                                const child = try TNode.init(self.a, board);
+                                try child.parents.append(crnt);
+                                crnt.children[i] = child;
+                                try h.put(board, child);
                                 try q.in(child);
                             }
                         }
@@ -422,11 +473,11 @@ const Tree = struct {
         std.debug.print("\n\n", .{});
         std.debug.print("Level || Times (ms)\n", .{});
         std.debug.print("-------------------\n", .{});
-        for (lvl_times.items, 0..) |time, i|{
-            if (i < 10){
-                std.debug.print("{}     || {}\n", .{ i+1, time });
-            }else{
-                std.debug.print("{}    || {}\n", .{ i+1, time });
+        for (lvl_times.items, 0..) |time, i| {
+            if (i < 10) {
+                std.debug.print("{}     || {}\n", .{ i + 1, time });
+            } else {
+                std.debug.print("{}    || {}\n", .{ i + 1, time });
             }
         }
     }

@@ -16,7 +16,7 @@ const Board = struct {
         self.board.set(6 * usz_col + row, player);
     }
 
-    pub fn reflect(self: *Board) Board {
+    pub fn reflect(self: Board) Board {
         var new_board = Board.init();
         for (0..3) |col| {
             for (0..6) |row| {
@@ -82,14 +82,12 @@ const Board = struct {
             }
         }
 
-        //check diagonal lh1
-        var i: usize = 0;
-        while (i < 3) : (i += 1) {
-            var j: usize = 0;
+        //check lh 1
+        for (0..3) |i| {
             var prev: i2 = 0;
             var cnt: u8 = 0;
-            while (j < 7 * (6 - i)) : (j += 7) {
-                const crnt = self.board.get(i + j);
+            for (0..(6 - i)) |j| {
+                const crnt = self.board.get(i + 7 * j);
                 if (crnt == 0) {
                     prev = 0;
                     cnt = 0;
@@ -110,14 +108,12 @@ const Board = struct {
             }
         }
 
-        //check diagonal lh2
-        i = 6;
-        while (i <= 18) : (i += 6) {
-            var j: usize = 0;
+        //check lh 2
+        for (0..3) |i| {
             var prev: i2 = 0;
             var cnt: u8 = 0;
-            while (j < 7 * (7 - i / 6)) : (j += 7) {
-                const crnt = self.board.get(i + j);
+            for (0..(6 - i)) |j| {
+                const crnt = self.board.get(6 + i + 7 * j);
                 if (crnt == 0) {
                     prev = 0;
                     cnt = 0;
@@ -138,14 +134,12 @@ const Board = struct {
             }
         }
 
-        //check diagonal hl1
-        i = 3;
-        while (i < 6) : (i += 1) {
-            var j: usize = 0;
+        //check hl 1
+        for (0..3) |i| {
             var prev: i2 = 0;
             var cnt: u8 = 0;
-            while (j < 5 * (i + 1)) : (j += 5) {
-                const crnt = self.board.get(i + j);
+            for (0..(i + 4)) |j| {
+                const crnt = self.board.get(3 + i + 5 * j);
                 if (crnt == 0) {
                     prev = 0;
                     cnt = 0;
@@ -166,14 +160,12 @@ const Board = struct {
             }
         }
 
-        //check diagonal hl2
-        i = 11;
-        while (i <= 23) : (i += 1) {
-            var j: usize = 0;
+        //check lh 2
+        for (0..3) |i| {
             var prev: i2 = 0;
             var cnt: u8 = 0;
-            while (j < 5 * (6 - (i - 11) / 6)) : (j += 5) {
-                const crnt = self.board.get(i + j);
+            for (0..(6 - i)) |j| {
+                const crnt = self.board.get(11 + i + 5 * j);
                 if (crnt == 0) {
                     prev = 0;
                     cnt = 0;
@@ -282,11 +274,7 @@ const Tree = struct {
 
         pub fn init(a: std.mem.Allocator, board: Board) !*TNode {
             const node: *TNode = try a.create(TNode);
-            node.* = .{ 
-            .data = board, 
-            .children = [7]?*TNode{ null, null, null, null, null, null, null }, 
-            .parents = std.ArrayList(*TNode).init(a)
-            };
+            node.* = .{ .data = board, .children = [7]?*TNode{ null, null, null, null, null, null, null }, .parents = std.ArrayList(*TNode).init(a) };
             return node;
         }
 
@@ -294,8 +282,8 @@ const Tree = struct {
             // Deinitialize children
             for (self.children) |maybe_child| {
                 if (maybe_child) |child| {
-                    for (0..child.parents.items.len) |i|{
-                        if (child.parents.items[i] == self){
+                    for (0..child.parents.items.len) |i| {
+                        if (child.parents.items[i] == self) {
                             _ = child.parents.swapRemove(i);
                             break;
                         }
@@ -305,18 +293,18 @@ const Tree = struct {
                     }
                 }
             }
-            
+
             self.parents.deinit();
             a.destroy(self);
         }
     };
-    
+
     root: *TNode,
     a: std.mem.Allocator,
     lvl: usize,
     player: i2,
 
-    pub fn init(a: std.mem.Allocator) !Tree{
+    pub fn init(a: std.mem.Allocator) !Tree {
         return Tree{
             .root = try TNode.init(a, Board.init()),
             .a = a,
@@ -325,93 +313,104 @@ const Tree = struct {
         };
     }
 
-    fn add_terminals_to_queue(node: ?*TNode, q: *Queue(*TNode)) !void{
+    fn add_terminals_to_queue(node: ?*TNode, q: *Queue(*TNode)) !void {
         if (node == null) return;
 
         var state = true;
-        for (0..7) |i|{
-            if (node.?.children[i] != null){
+        for (0..7) |i| {
+            if (node.?.children[i] != null) {
                 state = false;
                 break;
             }
         }
-        if (state){
+        if (state) {
             try q.in(node.?);
         }
 
-        for (node.?.children) |child|{
+        for (node.?.children) |child| {
             try add_terminals_to_queue(child, q);
         }
     }
 
-    pub fn propogate(self: *Tree, timer: i64) !void{
-        var q:Queue(*TNode) = Queue(*TNode).init(self.a);
+    pub fn propogate(self: *Tree, timer: i64) !void {
+        var q: Queue(*TNode) = Queue(*TNode).init(self.a);
         errdefer q.deinit();
         try add_terminals_to_queue(self.root, &q);
         var h = std.AutoHashMap(Board, *TNode).init(self.a);
         errdefer h.deinit();
 
         const start_time = std.time.milliTimestamp();
-        
-        var qlen:usize = q.len;
+        var lvl_time = std.time.milliTimestamp();
+        var lvl_times = std.ArrayList(i64).init(self.a);
+        errdefer lvl_times.deinit();
 
-        std.debug.print("level || Node Count\n", .{});
+        var qlen: usize = q.len;
+
+        std.debug.print("Level || Node Count\n", .{});
         std.debug.print("-------------------\n", .{});
-        while (true){
-            if (qlen == 0){
+        while (true) {
+            if (qlen == 0) {
                 self.lvl += 1;
                 self.player *= -1;
                 qlen = q.len;
                 h.clearRetainingCapacity();
-                std.debug.print("{}     || {}\n", .{self.lvl, qlen});
+                try lvl_times.append(std.time.milliTimestamp() - lvl_time);
+                lvl_time = std.time.milliTimestamp();
+                if (self.lvl < 10) {
+                    std.debug.print("{}     || {}\n", .{ self.lvl, qlen });
+                } else {
+                    std.debug.print("{}    || {}\n", .{ self.lvl, qlen });
+                }
                 if (std.time.milliTimestamp() - start_time > timer) break;
             }
 
-            var crnt:*TNode = undefined;
+            var crnt: *TNode = undefined;
             if (q.out()) |next| crnt = next else return error.QueueIsEmpty;
             qlen -= 1;
 
-            if (self.lvl < 6){
-                var col:u3 = 0;
-                while (col < 7) : (col += 1){
+            if (self.lvl < 6) {
+                var col: u3 = 0;
+                while (col < 7) : (col += 1) {
                     var new_board = crnt.data;
                     try new_board.move(col, self.player);
-                    if (h.get(new_board)) |node|{
+                    if (h.get(new_board)) |node| {
                         try node.parents.append(crnt);
-                        const usz_col:usize = @intCast(col);
+                        const usz_col: usize = @intCast(col);
                         crnt.children[usz_col] = node;
-                    }else if (h.get(new_board.reflect())) |node|{
+                    } else if (h.get(new_board.reflect())) |node| {
                         try node.parents.append(crnt);
-                        const usz_col:usize = @intCast(col);
+                        const usz_col: usize = @intCast(col);
                         crnt.children[usz_col] = node;
-                    }else{
+                    } else {
                         const child = try TNode.init(self.a, new_board);
                         try child.parents.append(crnt);
-                        const usz_col:usize = @intCast(col);
+                        const usz_col: usize = @intCast(col);
                         crnt.children[usz_col] = child;
                         try q.in(child);
                         try h.put(new_board, child);
                     }
                 }
-            }else{
+            } else {
                 const available_cols = crnt.data.check_cols();
-                for (0..7) |i|{
-                    if (available_cols[i]){
+
+                // No memory reducing strategy other then non-repeat/reflection
+                for (0..7) |i| {
+                    if (available_cols[i]) {
                         var new_board = crnt.data;
-                        const col:u3 = @intCast(i);
+                        const col: u3 = @intCast(i);
                         try new_board.move(col, self.player);
-                        if (h.get(new_board)) |node|{
+                        if (h.get(new_board)) |node| {
                             try node.parents.append(crnt);
                             crnt.children[i] = node;
-                        }else if (h.get(new_board.reflect())) |node|{
+                        } else if (h.get(new_board.reflect())) |node| {
                             try node.parents.append(crnt);
                             crnt.children[i] = node;
-                        }else{
+                        } else {
                             const child = try TNode.init(self.a, new_board);
                             try child.parents.append(crnt);
                             crnt.children[i] = child;
                             try h.put(new_board, child);
-                            if (new_board.is_win() == 0){
+                            if (new_board.is_win() == 0) {
                                 try q.in(child);
                             }
                         }
@@ -419,9 +418,20 @@ const Tree = struct {
                 }
             }
         }
+
+        std.debug.print("\n\n", .{});
+        std.debug.print("Level || Times (ms)\n", .{});
+        std.debug.print("-------------------\n", .{});
+        for (lvl_times.items, 0..) |time, i|{
+            if (i < 10){
+                std.debug.print("{}     || {}\n", .{ i+1, time });
+            }else{
+                std.debug.print("{}    || {}\n", .{ i+1, time });
+            }
+        }
     }
 
-    pub fn deinit(self: *Tree) void{
+    pub fn deinit(self: *Tree) void {
         self.root.deinit(self.a);
     }
 };
@@ -433,5 +443,5 @@ pub fn main() !void {
 
     var tree = try Tree.init(a);
     errdefer tree.deinit();
-    try tree.propogate(1000);
+    try tree.propogate(1000000);
 }
